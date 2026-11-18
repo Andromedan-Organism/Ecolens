@@ -1,9 +1,11 @@
 {
   "manifest_version": 3,
   "name": "EcoLens",
-  "version": "0.1.0",
-  "description": "Find openly licensed visual matches before generating a new image.",
-  "permissions": ["activeTab", "storage"],
-  "host_permissions": ["https://api.openverse.org/*"],
-  "action": { "default_title": "EcoLens", "default_popup": "popup.html" }
+  "version": "0.3.0",
+  "description": "Find reusable images and review their licenses before generating a new image.",
+  "host_permissions": ["https://ecolens-api.onrender.com/*"],
+  "action": {
+    "default_title": "EcoLens",
+    "default_popup": "popup.html"
+  }
 }
