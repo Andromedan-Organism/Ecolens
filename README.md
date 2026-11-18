@@ -1,4 +1,8 @@
-# EcoLens MVP
+
+![Ecolens Logo](https://github.com/TherealArithmeticProgression/Ecolens/blob/master/0219380b-9c04-4815-a3ac-596a5c762b17.png)
+
+# EcoLens 
+
 
 A Manifest V3 browser extension with a Python/FastAPI backend for finding openly licensed images and reviewing their reuse details.
 
