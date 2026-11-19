@@ -30,10 +30,9 @@ The extension requests host access only to the EcoLens API. It does not read cha
 
 ### Deploy to Render
 
-1. Push this repository to GitHub and create a new **Blueprint** in Render from the repository. Render reads `render.yaml` to install dependencies and start the API.
-2. The service is named `ecolens-api`; if Render requires a different available name, update both `BACKEND_URL` in `popup.js` and the API host in `manifest.json` to match the new `https://<name>.onrender.com` origin.
-3. Wait for the deployment to become healthy at `/health`.
-4. Load the extension unpacked from this directory. The API URL and manifest host permission must match the deployed service.
+The API is live at [https://ecolens-8mvu.onrender.com](https://ecolens-8mvu.onrender.com), with its health check at [https://ecolens-8mvu.onrender.com/health](https://ecolens-8mvu.onrender.com/health). The extension is configured to use this service.
+
+To deploy it yourself, connect this repository in Render and create a Python web service using the settings in `render.yaml`. You can create the service manually; using a Render Blueprint is optional.
 
 The API is public and has no user authentication in this MVP. CORS is not authentication; use provider-side rate limits/monitoring and add an access-control strategy before treating this as a production service. Render's free service may sleep when idle, so the first search after a quiet period can take longer.
 
