@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const {
   attributionText,
   createSearchCoordinator,
+  estimateAvoidedImpact,
   inspectPrompt,
   licenseLabel,
   normalizeResults,
@@ -41,7 +42,7 @@ test('empty search result is reported as empty', async () => {
     backendUrl: 'https://api.example.test',
     fetchImpl: async () => ({ ok: true, json: async () => ({ results: [] }) }),
   });
-  assert.deepEqual(result, { kind: 'empty', results: [] });
+  assert.deepEqual(result, { kind: 'empty', results: [], warnings: [] });
 });
 
 test('API errors are surfaced as errors', async () => {
@@ -60,8 +61,19 @@ test('normalized result preserves direct license details and attribution', () =>
   assert.equal(result.licenseVersion, '4.0');
   assert.equal(result.licenseUrl, sample.license_url);
   assert.equal(result.sourceUrl, sample.source_url);
+  assert.equal(result.source, 'Openverse');
   assert.equal(attributionText(result), sample.attribution);
   assert.equal(licenseLabel(result), 'CC BY 4.0');
+});
+
+test('impact estimate counts only whole confirmed reuses using the documented benchmark', () => {
+  assert.deepEqual(estimateAvoidedImpact(2), {
+    confirmedReuses: 2,
+    energyWh: 5.814,
+    co2eGrams: 1.7302464,
+  });
+  assert.equal(estimateAvoidedImpact(-1).confirmedReuses, 0);
+  assert.equal(estimateAvoidedImpact(1.5).confirmedReuses, 0);
 });
 
 test('search sends the prompt to the configured EcoLens backend', async () => {
@@ -77,8 +89,29 @@ test('search sends the prompt to the configured EcoLens backend', async () => {
 
   assert.equal(request.url, 'https://api.example.test/api/search');
   assert.equal(request.options.method, 'POST');
-  assert.deepEqual(JSON.parse(request.options.body), { query: 'blue flower' });
+  assert.deepEqual(JSON.parse(request.options.body), {
+    query: 'blue flower',
+    sources: ['openverse', 'wikimedia'],
+  });
   assert.equal(result.kind, 'results');
+});
+
+test('selected sources are sent to the backend and included in query identity', async () => {
+  const coordinator = createSearchCoordinator();
+  const sentSources = [];
+  const options = {
+    coordinator,
+    backendUrl: 'https://api.example.test',
+    fetchImpl: async (_url, request) => {
+      sentSources.push(JSON.parse(request.body).sources);
+      return { ok: true, json: async () => ({ results: [sample] }) };
+    },
+  };
+
+  await searchBackend('flower', { ...options, sources: ['wikimedia'] });
+  await searchBackend('flower', { ...options, sources: ['openverse'] });
+
+  assert.deepEqual(sentSources, [['wikimedia'], ['openverse']]);
 });
 
 test('duplicate in-flight queries coalesce and newer queries supersede older results', async () => {

@@ -1,4 +1,6 @@
 (() => {
+  const generationEnergyWh = 2.907;
+  const studyGridIntensityGramsPerKwh = 297.6;
   const privatePatterns = [
     /\b\d{3}-\d{2}-\d{4}\b/,
     /\b(?:\d[ -]*?){13,19}\b/,
@@ -33,6 +35,7 @@
         licenseVersion: item.license_version || item.licenseVersion || '',
         licenseUrl: item.license_url || item.licenseUrl || '',
         attribution: item.attribution || '',
+        source: item.source || 'Openverse',
         width: Number(item.width) || null,
         height: Number(item.height) || null,
       }));
@@ -55,6 +58,18 @@
   function licenseLabel(item) {
     const version = item.licenseVersion ? ` ${item.licenseVersion}` : '';
     return `${readableLicense(item.license)}${version}`;
+  }
+
+  function estimateAvoidedImpact(confirmedReuses) {
+    const count = Number.isSafeInteger(confirmedReuses) && confirmedReuses > 0
+      ? confirmedReuses
+      : 0;
+    const energyWh = count * generationEnergyWh;
+    return {
+      confirmedReuses: count,
+      energyWh,
+      co2eGrams: energyWh / 1000 * studyGridIntensityGramsPerKwh,
+    };
   }
 
   function createSearchCoordinator() {
@@ -85,12 +100,14 @@
     };
   }
 
-  async function searchBackend(query, { fetchImpl, coordinator, backendUrl }) {
-    const { id, promise } = coordinator.begin(query, async () => {
+  async function searchBackend(query, { fetchImpl, coordinator, backendUrl, sources = ['openverse', 'wikimedia'] }) {
+    const selectedSources = [...new Set(sources)];
+    const searchKey = JSON.stringify([query, selectedSources]);
+    const { id, promise } = coordinator.begin(searchKey, async () => {
       const response = await fetchImpl(`${backendUrl.replace(/\/+$/, '')}/api/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify({ query, sources: selectedSources }),
       });
       if (!response.ok) throw new Error(`EcoLens API returned ${response.status}`);
       return response.json();
@@ -100,14 +117,25 @@
       const payload = await promise;
       if (!coordinator.isCurrent(id)) return { kind: 'stale', results: [] };
       const results = normalizeResults(payload);
-      return results.length ? { kind: 'results', results } : { kind: 'empty', results: [] };
+      const warnings = Array.isArray(payload?.warnings) ? payload.warnings : [];
+      return results.length
+        ? { kind: 'results', results, warnings }
+        : { kind: 'empty', results: [], warnings };
     } catch (error) {
       if (!coordinator.isCurrent(id)) return { kind: 'stale', results: [] };
       return { kind: 'error', message: error.message, results: [] };
     }
   }
 
-  const api = { attributionText, createSearchCoordinator, inspectPrompt, licenseLabel, normalizeResults, searchBackend };
+  const api = {
+    attributionText,
+    createSearchCoordinator,
+    estimateAvoidedImpact,
+    inspectPrompt,
+    licenseLabel,
+    normalizeResults,
+    searchBackend,
+  };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else globalThis.EcoLensCore = api;
 })();

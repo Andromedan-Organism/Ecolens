@@ -5,14 +5,29 @@ const resultsContainer = $('results');
 const comparison = $('comparison');
 const BACKEND_URL = 'https://ecolens-8mvu.onrender.com';
 const coordinator = EcoLensCore.createSearchCoordinator();
+const sourceInputs = [...document.querySelectorAll('input[name="source"]')];
+const availableSources = sourceInputs.map((input) => input.value);
+const sourcePreferenceKey = 'preferredSources';
+const impactStatsKey = 'impactStats';
+let selectedSources = [...availableSources];
+let sourcePreferencesReady = false;
+let confirmedReuses = 0;
+let impactSaveQueue = Promise.resolve();
 let displayedResults = [];
 let selectedIds = new Set();
+
+function updateImpactSummary() {
+  const estimate = EcoLensCore.estimateAvoidedImpact(confirmedReuses);
+  $('reuse-count').textContent = String(estimate.confirmedReuses);
+  $('energy-estimate').textContent = `${estimate.energyWh.toFixed(1)} Wh`;
+  $('carbon-estimate').textContent = `${estimate.co2eGrams.toFixed(1)} g`;
+}
 
 function updatePrivacy() {
   const result = EcoLensCore.inspectPrompt(promptBox.value);
   $('privacy').textContent = result.message;
   $('privacy').classList.toggle('warning', result.hasWarning);
-  searchButton.disabled = !result.prompt || result.hasWarning;
+  searchButton.disabled = !sourcePreferencesReady || !result.prompt || result.hasWarning;
 }
 
 function setStatus(message, state = '') {
@@ -31,6 +46,70 @@ function renderResults(results) {
   updateCompareButton();
 }
 
+async function loadSourcePreferences() {
+  try {
+    const stored = await chrome.storage.local.get([sourcePreferenceKey, impactStatsKey]);
+    if (Array.isArray(stored[sourcePreferenceKey])) {
+      const validSources = stored[sourcePreferenceKey].filter((source) => availableSources.includes(source));
+      if (validSources.length) selectedSources = [...new Set(validSources)];
+    }
+    const storedCount = stored[impactStatsKey]?.confirmedReuses;
+    confirmedReuses = Number.isSafeInteger(storedCount) && storedCount > 0 ? storedCount : 0;
+    sourceInputs.forEach((input) => {
+      input.checked = selectedSources.includes(input.value);
+    });
+    updateImpactSummary();
+    sourcePreferencesReady = true;
+    updatePrivacy();
+  } catch {
+    setStatus('Could not load source preferences. Reload EcoLens and try again.', 'error');
+  }
+}
+
+async function recordReuse(button) {
+  button.disabled = true;
+  const save = impactSaveQueue.catch(() => {}).then(async () => {
+    const nextCount = confirmedReuses + 1;
+    await chrome.storage.local.set({
+      [impactStatsKey]: {
+        confirmedReuses: nextCount,
+        updatedAt: new Date().toISOString(),
+      },
+    });
+    confirmedReuses = nextCount;
+    updateImpactSummary();
+    return nextCount;
+  });
+  impactSaveQueue = save;
+
+  try {
+    const count = await save;
+    button.textContent = 'Reuse counted';
+    button.classList.add('reuse-button--counted');
+    setStatus(`Reuse recorded locally. Your total is now ${count}.`, 'success');
+  } catch {
+    button.disabled = false;
+    setStatus('Could not save this reuse on your device, so it was not counted.', 'error');
+  }
+}
+
+async function saveSourcePreferences() {
+  const nextSources = sourceInputs.filter((input) => input.checked).map((input) => input.value);
+  if (!nextSources.length) {
+    sourceInputs.find((input) => input.value === selectedSources[0]).checked = true;
+    setStatus('Choose at least one search source.');
+    return;
+  }
+
+  selectedSources = nextSources;
+  updatePrivacy();
+  try {
+    await chrome.storage.local.set({ [sourcePreferenceKey]: selectedSources });
+  } catch {
+    setStatus('Could not save source preferences. Your choice may not persist.', 'error');
+  }
+}
+
 function makeCard(item) {
   const card = document.createElement('article');
   card.className = 'card';
@@ -47,6 +126,11 @@ function makeCard(item) {
   const title = document.createElement('h2');
   title.textContent = item.title;
   details.append(title);
+
+  const sourceLabel = document.createElement('p');
+  sourceLabel.className = 'source-label';
+  sourceLabel.textContent = item.source;
+  details.append(sourceLabel);
 
   const creator = document.createElement('p');
   creator.className = 'creator';
@@ -78,6 +162,14 @@ function makeCard(item) {
 
   const actions = document.createElement('div');
   actions.className = 'card-actions';
+  const reuse = document.createElement('button');
+  reuse.type = 'button';
+  reuse.className = 'reuse-button';
+  reuse.textContent = 'I reused this instead';
+  reuse.setAttribute('aria-label', `Count ${item.title} as reused instead of generating`);
+  reuse.addEventListener('click', () => recordReuse(reuse));
+  actions.append(reuse);
+
   const copy = document.createElement('button');
   copy.type = 'button';
   copy.className = 'copy';
@@ -151,6 +243,9 @@ function compareSelected() {
     const title = document.createElement('h3');
     title.textContent = item.title;
     option.append(title);
+    const source = document.createElement('p');
+    source.textContent = `Source: ${item.source}`;
+    option.append(source);
     const dimensions = document.createElement('p');
     dimensions.textContent = item.width && item.height ? `${item.width} × ${item.height}px` : 'Dimensions not provided';
     option.append(dimensions);
@@ -188,13 +283,17 @@ function compareSelected() {
 
 async function runSearch() {
   const inspection = EcoLensCore.inspectPrompt(promptBox.value);
-  if (!inspection.prompt || inspection.hasWarning) return;
+  if (!sourcePreferencesReady || !inspection.prompt || inspection.hasWarning) return;
   searchButton.disabled = true;
-  setStatus('Searching Openverse…', 'loading');
+  const sourceLabels = selectedSources.map((source) => (
+    source === 'wikimedia' ? 'Wikimedia Commons' : 'Openverse'
+  ));
+  setStatus(`Searching ${sourceLabels.join(' and ')}…`, 'loading');
   const outcome = await EcoLensCore.searchBackend(inspection.prompt, {
     fetchImpl: fetch,
     coordinator,
     backendUrl: BACKEND_URL,
+    sources: selectedSources,
   });
   if (outcome.kind === 'stale') return;
   if (outcome.kind === 'error') {
@@ -202,14 +301,17 @@ async function runSearch() {
     setStatus(`Search failed: ${outcome.message}. Try again.`, 'error');
   } else if (outcome.kind === 'empty') {
     renderResults([]);
-    setStatus('No results found. Try a different description.', 'empty');
+    setStatus(`No results found. Try a different description. ${outcome.warnings.join(' ')}`, 'empty');
   } else {
     renderResults(outcome.results);
-    setStatus(`${outcome.results.length} results. Review source and license details before reuse.`);
+    const warning = outcome.warnings.length ? ` ${outcome.warnings.join(' ')}` : '';
+    setStatus(`${outcome.results.length} results. Review source and license details before reuse.${warning}`, outcome.warnings.length ? 'warning' : '');
   }
   updatePrivacy();
 }
 
 promptBox.addEventListener('input', updatePrivacy);
 searchButton.addEventListener('click', runSearch);
+sourceInputs.forEach((input) => input.addEventListener('change', saveSourcePreferences));
 updatePrivacy();
+loadSourcePreferences();

@@ -7,30 +7,94 @@
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <header>
-      <div class="mark" aria-hidden="true">◉</div>
-      <div>
-        <h1>EcoLens</h1>
-        <p>Find reusable images.</p>
+    <header class="app-header">
+      <div class="header-top">
+        <div class="brand-copy">
+          <p class="eyebrow">Open-licensed alternative to LLM-generated images</p>
+          <h1>EcoLens</h1>
+        </div>
+        <div class="header-art" aria-hidden="true">
+          <span class="geo-line"></span>
+          <span class="geo-fill"></span>
+          <span class="geo-dots"></span>
+          <span class="geo-cross"></span>
+        </div>
+      </div>
+      <div class="header-caption">
+        <span>Reuse before generation.</span>
+        <span>OPENVERSE + COMMONS</span>
       </div>
     </header>
     <main>
-      <label for="prompt">Describe the image you need</label>
-      <textarea id="prompt" rows="4" placeholder="Type or paste an image prompt…"></textarea>
-      <p id="privacy" class="privacy" aria-live="polite">
-        A limited local check can warn about some personal details. It cannot guarantee a prompt is safe to share.
-      </p>
-      <p class="disclosure">
-        Pressing <strong>Search Openverse</strong> sends your prompt to EcoLens's hosted service, which forwards it to Openverse.
-      </p>
-      <button id="search" class="primary" disabled>Search Openverse</button>
+      <section class="impact-panel" aria-labelledby="impact-title">
+        <div class="impact-heading">
+          <div>
+            <p class="eyebrow">YOUR REUSE IMPACT</p>
+            <h2 id="impact-title">Small choices add up</h2>
+          </div>
+          <span class="local-badge">SAVED ON THIS DEVICE</span>
+        </div>
+        <p class="impact-intro">Only images you mark as reused instead of generating count here.</p>
+        <div class="impact-metrics" aria-live="polite">
+          <div class="metric">
+            <strong id="reuse-count">0</strong>
+            <span>confirmed reuses</span>
+          </div>
+          <div class="metric">
+            <strong id="energy-estimate">0.0 Wh</strong>
+            <span>estimated energy avoided</span>
+          </div>
+          <div class="metric">
+            <strong id="carbon-estimate">0.0 g</strong>
+            <span>estimated CO₂e avoided</span>
+          </div>
+        </div>
+        <details class="impact-method">
+          <summary>How the estimate works</summary>
+          <p>
+            Each confirmation represents one generation you say you avoided. We use a research benchmark of
+            2.907 Wh per image and estimate about 0.9 g CO₂e using that study's AWS us-west-2 grid intensity.
+            This gross estimate does not subtract EcoLens search/network use or hardware impacts. It is not a
+            measurement of your activity; models, image settings, and electricity mix vary.
+          </p>
+          <a href="https://arxiv.org/abs/2311.16863" target="_blank" rel="noopener noreferrer">
+            Luccioni et al., ACM FAccT 2024
+          </a>
+        </details>
+        <p class="sdg-note">
+          Reuse supports the aims of
+          <a href="https://sdgs.un.org/goals/goal12" target="_blank" rel="noopener noreferrer">SDG 12</a>
+          and
+          <a href="https://sdgs.un.org/goals/goal13" target="_blank" rel="noopener noreferrer">SDG 13</a>.
+          EcoLens is not affiliated with or endorsed by the UN.
+        </p>
+      </section>
+
+      <section class="search-panel" aria-labelledby="prompt-label">
+        <label id="prompt-label" for="prompt">What image are you looking for?</label>
+        <textarea id="prompt" rows="3" placeholder="e.g. A red fox in a snowy forest"></textarea>
+        <p id="privacy" class="privacy" aria-live="polite">
+          A limited local check can warn about some personal details. It cannot guarantee a prompt is safe to share.
+        </p>
+        <p class="disclosure">
+          Your prompt is sent to EcoLens's hosted service and forwarded to the sources you select.
+        </p>
+        <fieldset id="sources" class="sources">
+          <legend>Search sources</legend>
+          <label><input type="checkbox" name="source" value="openverse" checked /> Openverse</label>
+          <label><input type="checkbox" name="source" value="wikimedia" checked /> Wikimedia Commons</label>
+          <p>Choices are saved on this browser. Commons results are limited to CC0, public-domain, CC BY, and CC BY-SA.</p>
+        </fieldset>
+        <button id="search" class="primary" disabled>Find reusable images</button>
+      </section>
+
       <div id="status" class="status" role="status" aria-live="polite">
-        Search for openly licensed image results.
+        Search selected sources for openly licensed image results.
       </div>
       <section id="results" class="results" aria-label="Search results"></section>
       <section id="comparison" class="comparison hidden" aria-live="polite"></section>
       <footer>
-        Check the source and license terms for your intended use. EcoLens does not determine whether a use is legally permitted.
+        Always verify the original source and license. EcoLens does not determine whether your use is legally permitted.
       </footer>
     </main>
     <script src="core.js"></script>

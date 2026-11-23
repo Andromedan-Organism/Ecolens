@@ -7,15 +7,31 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.models import SearchRequest, SearchResponse
-from backend.app.providers import OpenverseImageSearchProvider, ProviderError
+from backend.app.providers import (
+    OpenverseImageSearchProvider,
+    ProviderError,
+    WikimediaCommonsImageSearchProvider,
+)
 from backend.app.services import ImageSearchService
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    """Create providers once and inject them behind the shared service contract."""
+    async with httpx.AsyncClient(
+        timeout=10.0,
+        headers={
+            "User-Agent": (
+                "EcoLens/0.4.0 "
+                "(https://github.com/TherealArithmeticProgression/Ecolens)"
+            )
+        },
+    ) as client:
         app.state.search_service = ImageSearchService(
-            OpenverseImageSearchProvider(client)
+            {
+                "openverse": OpenverseImageSearchProvider(client),
+                "wikimedia": WikimediaCommonsImageSearchProvider(client),
+            }
         )
         yield
 
@@ -48,9 +64,8 @@ async def search_images(
     service: ImageSearchService = Depends(get_search_service),
 ) -> SearchResponse:
     try:
-        results = await service.search(request.query)
+        return await service.search(request.query, request.sources)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except ProviderError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
-    return SearchResponse(results=results)
